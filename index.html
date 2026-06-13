@@ -627,7 +627,7 @@
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    .msg.mind { align-self: flex-start; }
+    .msg.mind { align-self: flex-start; max-width: 92%; }
     .msg.user { align-self: flex-end; }
 
     .bubble {
@@ -637,13 +637,18 @@
       word-break: break-word;
     }
 
+    /* Mind — sem bolha, texto solto */
     .msg.mind .bubble {
-      background: var(--mind-bubble);
-      border: 1px solid var(--mind-bubble-border);
-      border-radius: 4px 18px 18px 18px;
-      font-family: 'Space Grotesk', sans-serif;
-      color: #E8E4F8;
+      background: none;
+      border: none;
+      border-radius: 0;
+      padding: 2px 4px 2px 0;
+      color: var(--text);
+      line-height: 1.7;
+      letter-spacing: 0.01em;
     }
+
+    /* usuário — bolha mantida */
     .msg.user .bubble {
       background: var(--user-bubble);
       border: 1px solid #2A2A38;
@@ -658,6 +663,7 @@
       padding: 0 4px;
     }
     .msg.user .msg-time { text-align: right; }
+    .msg.mind .msg-time { padding: 0 2px; }
 
     .typing-bubble {
       background: var(--mind-bubble);
@@ -1540,6 +1546,10 @@
       <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
       Dados
     </button>
+    <button class="tab-btn" onclick="switchTab('local', this)">
+      <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Local
+    </button>
     </div><!-- fim settings-tabs -->
 
   <div class="settings-body">
@@ -1787,6 +1797,40 @@
         </div>
       </div>
     </div><!-- fim tab-dados -->
+
+    <!-- ABA: LOCAL -->
+    <div class="tab-panel" id="tab-local">
+      <div class="cfg-section">
+        <div class="cfg-label">Localização</div>
+        <div class="cfg-row">
+          <div class="cfg-row-info">
+            <div class="cfg-row-name">Ativar localização</div>
+            <div class="cfg-row-desc">Mind ajusta o comportamento pelo lugar onde você tá</div>
+          </div>
+          <div class="toggle" id="loc-toggle" onclick="toggleLocation()"></div>
+        </div>
+        <div id="loc-status" style="font-size:12px;color:var(--text-dimmer);margin-top:6px;display:none"></div>
+      </div>
+
+      <div class="cfg-section" id="loc-places-section" style="display:none">
+        <div class="cfg-label">Seus lugares</div>
+        <div id="loc-places-list"></div>
+        <button class="profile-save-btn" style="margin-top:10px" onclick="locSaveCurrentPlace()">
+          📍 Salvar lugar atual
+        </button>
+      </div>
+
+      <div class="cfg-section" id="loc-rules-section" style="display:none">
+        <div class="cfg-label">Comportamento por lugar</div>
+        <div style="font-size:12px;color:var(--text-dimmer);line-height:1.6">
+          <div style="margin-bottom:8px">🟢 <strong>Em casa</strong> — comportamento normal</div>
+          <div style="margin-bottom:8px">🔴 <strong>Trabalho / escola</strong> — silêncio total, só responde se você falar</div>
+          <div style="margin-bottom:8px">🟡 <strong>Em movimento</strong> — no máximo uma notificação curta</div>
+          <div>⚫ <strong>Lugar desconhecido</strong> — comportamento reduzido</div>
+        </div>
+      </div>
+    </div><!-- fim tab-local -->
+
     </div><!-- fim settings-body -->
   </div><!-- fim settings-layout -->
 
@@ -2130,20 +2174,28 @@
     if (messages.length === 0) { renderEmpty(); return; }
     let html = '<div class="date-sep"><span>hoje</span></div>';
     const aeroStyle = cfg.aero
-      ? 'backdrop-filter:blur(12px) saturate(1.6);-webkit-backdrop-filter:blur(12px) saturate(1.6);box-shadow:0 4px 24px rgba(100,180,255,0.18),inset 0 1px 0 rgba(255,255,255,0.7);'
+      ? 'backdrop-filter:blur(12px) saturate(1.6);-webkit-backdrop-filter:blur(12px) saturate(1.6);'
       : '';
     messages.forEach(m => {
       const isMind = m.role === 'mind';
-      const br = isMind
-        ? `4px ${cfg.mindRadius}px ${cfg.mindRadius}px ${cfg.mindRadius}px`
-        : `${cfg.userRadius}px ${cfg.userRadius}px 4px ${cfg.userRadius}px`;
-      const bg     = isMind ? cfg.mindBubbleBg  : cfg.userBubbleBg;
-      const border = isMind ? cfg.mindBubleBorder : (cfg.userBorder || '#2A2A38');
-      const color  = isMind ? (cfg.mindText || cfg.text) : (cfg.userText || cfg.text);
-      html += `<div class="msg ${isMind ? 'mind' : 'user'}">
-        <div class="bubble" style="font-family:${cfg.fontFamily};font-size:${cfg.fontSize}px;border-radius:${br};background:${bg};border-color:${border};color:${color};${aeroStyle}">${escHtml(m.text)}</div>
-        <div class="msg-time">${m.time}</div>
-      </div>`;
+      if (isMind) {
+        // sem bolha — texto solto
+        const color = cfg.mindText || 'var(--text)';
+        html += `<div class="msg mind">
+          <div class="bubble" style="font-family:${cfg.fontFamily};font-size:${cfg.fontSize}px;color:${color}">${escHtml(m.text).replace(/\n/g,'<br>')}</div>
+          <div class="msg-time">${m.time}</div>
+        </div>`;
+      } else {
+        // bolha do usuário
+        const br     = `${cfg.userRadius}px ${cfg.userRadius}px 4px ${cfg.userRadius}px`;
+        const bg     = cfg.userBubbleBg;
+        const border = cfg.userBorder || '#2A2A38';
+        const color  = cfg.userText || 'var(--text)';
+        html += `<div class="msg user">
+          <div class="bubble" style="font-family:${cfg.fontFamily};font-size:${cfg.fontSize}px;border-radius:${br};background:${bg};border-color:${border};color:${color};${aeroStyle}">${escHtml(m.text).replace(/\n/g,'<br>')}</div>
+          <div class="msg-time">${m.time}</div>
+        </div>`;
+      }
     });
     messagesEl.innerHTML = html;
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -2446,7 +2498,7 @@
             if (p.type === 'delta' && p.text) {
               mindMsg.text += p.text;
               const last = [...messagesEl.querySelectorAll('.msg.mind .bubble')].at(-1);
-              if (last) { last.innerHTML = escHtml(mindMsg.text).replace(/\n/g, '<br>'); }
+              if (last) last.innerHTML = escHtml(mindMsg.text).replace(/\n/g, '<br>');
               messagesEl.scrollTop = messagesEl.scrollHeight;
             }
           } catch { /* incompleto */ }
@@ -3078,6 +3130,111 @@
       api.get('/memories').then(mems => initMemoryMap(mems)).catch(() => initMemoryMap([]));
     }
   };
+
+  // ════════════════════════════════
+  //  LOCALIZAÇÃO
+  // ════════════════════════════════
+  let locWatchId   = null;
+  let locEnabled   = false;
+  let locSendTimer = null;
+
+  function toggleLocation() {
+    locEnabled
+      ? (() => { locEnabled=false; document.getElementById('loc-toggle').classList.remove('on'); stopLocation(); })()
+      : (navigator.geolocation ? requestLocation() : locSetStatus('Geolocalização não suportada.'));
+  }
+
+  function requestLocation() {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        locEnabled = true;
+        document.getElementById('loc-toggle').classList.add('on');
+        document.getElementById('loc-places-section').style.display = '';
+        document.getElementById('loc-rules-section').style.display  = '';
+        locSetStatus('');
+        startLocationWatch();
+        sendLocationToServer(pos.coords.latitude, pos.coords.longitude);
+        loadLocPlaces();
+      },
+      () => locSetStatus('Permissão negada. Ative a localização no navegador.'),
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }
+
+  function startLocationWatch() {
+    if (locWatchId) navigator.geolocation.clearWatch(locWatchId);
+    locWatchId = navigator.geolocation.watchPosition(
+      pos => {
+        clearTimeout(locSendTimer);
+        locSendTimer = setTimeout(() =>
+          sendLocationToServer(pos.coords.latitude, pos.coords.longitude),
+        5 * 60 * 1000);
+      },
+      () => {}, { enableHighAccuracy: false, maximumAge: 5 * 60 * 1000 }
+    );
+  }
+
+  function stopLocation() {
+    if (locWatchId) { navigator.geolocation.clearWatch(locWatchId); locWatchId = null; }
+    clearTimeout(locSendTimer);
+    document.getElementById('loc-status').style.display         = 'none';
+    document.getElementById('loc-places-section').style.display = 'none';
+    document.getElementById('loc-rules-section').style.display  = 'none';
+    api.post('/location', { enabled: false }).catch(() => {});
+  }
+
+  async function sendLocationToServer(lat, lon) {
+    try {
+      const data = await api.post('/location', { lat, lon, enabled: true });
+      if (data.place) locSetStatus(`📍 ${data.place}`);
+    } catch (e) { console.error('[location]', e); }
+  }
+
+  function locSetStatus(msg) {
+    const el = document.getElementById('loc-status');
+    el.textContent = msg; el.style.display = msg ? '' : 'none';
+  }
+
+  async function locSaveCurrentPlace() {
+    const btn = document.querySelector('#loc-places-section .profile-save-btn');
+    btn.textContent = 'Detectando...'; btn.disabled = true;
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const name = prompt('Nome desse lugar (ex: Casa, Trabalho, Academia):');
+      if (!name) { btn.textContent = '📍 Salvar lugar atual'; btn.disabled = false; return; }
+      const lower = name.toLowerCase();
+      const type  = lower.includes('trabalho')||lower.includes('escola')||lower.includes('facul') ? 'work'
+                  : lower.includes('casa')||lower.includes('lar') ? 'home'
+                  : lower.includes('academia')||lower.includes('gym') ? 'gym' : 'other';
+      try {
+        await api.post('/location/places', { lat: pos.coords.latitude, lon: pos.coords.longitude, name, type });
+        await loadLocPlaces();
+      } catch (e) { console.error(e); }
+      btn.textContent = '📍 Salvar lugar atual'; btn.disabled = false;
+    }, () => { btn.textContent = '📍 Salvar lugar atual'; btn.disabled = false; });
+  }
+
+  async function loadLocPlaces() {
+    try {
+      const places = await api.get('/location/places');
+      const list   = document.getElementById('loc-places-list');
+      const icons  = { home:'🏠', work:'💼', gym:'🏋️', other:'📍' };
+      const labels = { home:'comportamento normal', work:'silêncio total', gym:'reduzido', other:'reduzido' };
+      list.innerHTML = places.length
+        ? places.map(p => `
+            <div class="cfg-row" style="margin-bottom:6px">
+              <div class="cfg-row-info">
+                <div class="cfg-row-name">${icons[p.type]||'📍'} ${p.name}</div>
+                <div class="cfg-row-desc">${labels[p.type]||'reduzido'}</div>
+              </div>
+              <button onclick="locDeletePlace('${p.id}')" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:18px;padding:0">×</button>
+            </div>`).join('')
+        : '<div style="font-size:12px;color:var(--text-dimmer)">Nenhum lugar salvo ainda</div>';
+    } catch (e) { console.error(e); }
+  }
+
+  async function locDeletePlace(id) {
+    try { await api.delete(`/location/places/${id}`); await loadLocPlaces(); } catch {}
+  }
 
   renderEmpty();
   applyCfg();
