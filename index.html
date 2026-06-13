@@ -2182,7 +2182,7 @@
         // sem bolha — texto solto
         const color = cfg.mindText || 'var(--text)';
         html += `<div class="msg mind">
-          <div class="bubble" style="font-family:${cfg.fontFamily};font-size:${cfg.fontSize}px;color:${color}">${escHtml(m.text).replace(/\n/g,'<br>')}</div>
+          <div class="bubble" style="font-family:${cfg.fontFamily};font-size:${cfg.fontSize}px;color:${color}">${renderMarkdown(m.text)}</div>
           <div class="msg-time">${m.time}</div>
         </div>`;
       } else {
@@ -2203,6 +2203,22 @@
 
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderMarkdown(text) {
+    let html = escHtml(text);
+    // negrito
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    // itálico
+    html = html.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+    // inline code
+    html = html.replace(/`([^`\n]+)`/g, '<code style="background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:0.88em;font-family:monospace">$1</code>');
+    // quebras de linha → <br>
+    html = html.replace(/\n/g, '<br>');
+    // bullets: • ou - no início de linha (após <br> ou início)
+    html = html.replace(/(^|<br>)[•\-] ([^\n<]+)/g, '$1<div style="display:flex;gap:8px;margin:3px 0"><span style="color:var(--accent);flex-shrink:0">•</span><span>$2</span></div>');
+    return html;
   }
 
   function showTypingBubble() {
@@ -2495,10 +2511,12 @@
           if (!line.startsWith('data:')) continue;
           try {
             const p = JSON.parse(line.slice(5).trim());
-            if (p.type === 'delta' && p.text) {
+            if (p.type === 'status' && p.text) {
+              setStatus(p.text);
+            } else if (p.type === 'delta' && p.text) {
               mindMsg.text += p.text;
               const last = [...messagesEl.querySelectorAll('.msg.mind .bubble')].at(-1);
-              if (last) last.innerHTML = escHtml(mindMsg.text).replace(/\n/g, '<br>');
+              if (last) last.innerHTML = renderMarkdown(mindMsg.text);
               messagesEl.scrollTop = messagesEl.scrollHeight;
             }
           } catch { /* incompleto */ }
